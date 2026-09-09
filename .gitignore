@@ -1,0 +1,38 @@
+# Local macOS and Xcode state
+.DS_Store
+xcuserdata/
+*.xcuserstate
+
+# Build products, previews, fixtures, and logs
+.derivedData/
+DerivedData/
+.build/
+build/
+.xcodebuild.log
+*.log
+*.app/
+*.dSYM/
+*.xcarchive/
+*.xcresult/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.local
+*.p12
+*.pfx
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+
+# Captured audio and local transcription data
+recordings/
+transcripts/
+*.caf
+*.aiff
+*.aif
+*.wav
+*.m4a
+*.mp3
