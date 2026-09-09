@@ -2,6 +2,12 @@
 
 A native macOS menu bar dictation app for English and Japanese. Hold a configurable shortcut while speaking, then release it to transcribe with Apple Speech and insert the result at your cursor. No Dock icon, account, API key, subscription, or server transcription.
 
+<p align="center">
+  <img src="docs/assets/koe-demo.gif" alt="Koe’s live waveform reacts to speech while recording, then displays Sent when dictation finishes." width="960">
+</p>
+
+<p align="center"><em>Hold to speak. Release to insert.</em></p>
+
 ## Requirements
 
 - macOS 26 or newer on an Apple silicon Mac supported by `SpeechTranscriber`.
