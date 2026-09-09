@@ -78,3 +78,7 @@ build/speech-check build/japanese.aiff automatic
 - [SpeechTranscriber](https://developer.apple.com/documentation/speech/speechtranscriber)
 - [AssetInventory](https://developer.apple.com/documentation/speech/assetinventory)
 - [Apple’s SpeechAnalyzer introduction](https://developer.apple.com/videos/play/wwdc2025/277/)
+
+## License
+
+Koe is released under the [MIT License](LICENSE).
