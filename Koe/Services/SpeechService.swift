@@ -51,8 +51,8 @@ actor SpeechService: SpeechProcessing {
     func transcribe(url: URL, mode: LanguageMode) async throws -> TranscriptSelection {
         guard try AudioClipValidator.containsAudio(at: url) else { throw SpeechFailure.noSpeech }
         var candidates: [TranscriptCandidate] = []
-        // Sequential analysis avoids contention between two Apple model instances.
-        // Auto mode evaluates the same recording in both languages, entirely locally.
+        // Sequential analysis avoids contention between Apple model instances.
+        // Auto mode evaluates the same recording in all supported languages locally.
         for id in mode.localeIDs {
             try Task.checkCancellation()
             candidates.append(try await recognize(url: url, localeID: id))

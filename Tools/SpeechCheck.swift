@@ -12,14 +12,14 @@ import Speech
         }
         if CommandLine.arguments[1] == "--install" {
             try await service.install(mode: .automatic)
-            print("English and Japanese assets installed.")
+            print("English, Japanese, and French assets installed.")
             return
         }
         let mode = CommandLine.arguments.count > 2 ? LanguageMode(rawValue: CommandLine.arguments[2]) ?? .automatic : .automatic
         let result = try await service.transcribe(url: URL(fileURLWithPath: CommandLine.arguments[1]), mode: mode)
         print("Selected: \(result.best.languageName), confidence: \(String(describing: result.best.confidence)), score: \(result.best.selectionScore)")
         print(result.best.text)
-        if let alternative = result.alternative {
+        for alternative in result.alternatives {
             print("Alternative: \(alternative.languageName), confidence: \(String(describing: alternative.confidence)), score: \(alternative.selectionScore)")
             print(alternative.text)
         }

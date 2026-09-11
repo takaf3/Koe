@@ -41,11 +41,78 @@ final class KoeTests: XCTestCase {
         XCTAssertFalse(key.suspended)
     }
 
-    func testLanguageModesAreLimitedToEnglishAndJapanese() {
-        XCTAssertEqual(LanguageMode.allCases.count, 3)
-        XCTAssertEqual(LanguageMode.automatic.localeIDs, ["en-US", "ja-JP"])
+    func testLanguageModesIncludeFrench() {
+        XCTAssertEqual(LanguageMode.allCases, [.automatic, .japanese, .english, .french])
+        XCTAssertEqual(LanguageMode.automatic.localeIDs, ["en-US", "ja-JP", "fr-FR"])
         XCTAssertEqual(LanguageMode.japanese.localeIDs, ["ja-JP"])
         XCTAssertEqual(LanguageMode.english.localeIDs, ["en-US"])
+        XCTAssertEqual(LanguageMode.french.localeIDs, ["fr-FR"])
+    }
+
+    @MainActor func testFrenchPreferencePersistsAndReadinessUsesSelectedModels() throws {
+        let suite = "KoeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppModel(defaults: defaults, startServices: false)
+        defer { model.hotKey.invalidate() }
+        XCTAssertEqual(model.mode, .automatic)
+        model.models = ["en-US": .installed, "ja-JP": .installed]
+        model.mode = .english
+        XCTAssertTrue(model.modelsReady)
+        model.mode = .automatic
+        XCTAssertFalse(model.modelsReady)
+        model.mode = .french
+        XCTAssertFalse(model.modelsReady)
+        model.models = ["fr-FR": .installed]
+        XCTAssertTrue(model.modelsReady)
+        let restored = AppModel(defaults: defaults, startServices: false)
+        defer { restored.hotKey.invalidate() }
+        XCTAssertEqual(restored.mode, .french)
+        model.models["en-US"] = .installed
+        model.models["ja-JP"] = .installed
+        model.mode = .automatic
+        XCTAssertTrue(model.modelsReady)
+    }
+
+    func testFrenchWinsAgainstOtherLanguagesAndKeepsAlternatives() throws {
+        let french = TranscriptCandidate(localeID: "fr-FR", text: "La réunion est à dix heures.", confidence: 0.94, audioCoverage: 0.95)
+        let english = TranscriptCandidate(localeID: "en-US", text: "The reunion.", confidence: 0.4, audioCoverage: 0.5)
+        let japanese = TranscriptCandidate(localeID: "ja-JP", text: "十時", confidence: 0.3, audioCoverage: 0.2)
+        let result = try XCTUnwrap(LanguageSelector.select([english, french, japanese]))
+        XCTAssertEqual(result.best, french)
+        XCTAssertEqual(result.best.languageName, "French")
+        XCTAssertEqual(result.alternatives, [english, japanese])
+        XCTAssertFalse(result.isUncertain)
+    }
+
+    func testThreeWayAmbiguityKeepsFrenchAvailable() throws {
+        let english = TranscriptCandidate(localeID: "en-US", text: "Hello", confidence: 0.82, audioCoverage: 1)
+        let japanese = TranscriptCandidate(localeID: "ja-JP", text: "ハロー", confidence: 0.80, audioCoverage: 1)
+        let french = TranscriptCandidate(localeID: "fr-FR", text: "Allô", confidence: 0.79, audioCoverage: 1)
+        let result = try XCTUnwrap(LanguageSelector.select([french, japanese, english]))
+        XCTAssertTrue(result.isUncertain)
+        XCTAssertEqual(result.alternatives, [japanese, french])
+    }
+
+    func testMissingConfidenceInThirdLanguageRequiresChoice() throws {
+        let english = TranscriptCandidate(localeID: "en-US", text: "Hello", confidence: 0.92, audioCoverage: 1)
+        let japanese = TranscriptCandidate(localeID: "ja-JP", text: "ハロー", confidence: 0.7, audioCoverage: 1)
+        let french = TranscriptCandidate(localeID: "fr-FR", text: "Allô", confidence: nil, audioCoverage: 1)
+        let result = try XCTUnwrap(LanguageSelector.select([english, japanese, french]))
+        XCTAssertTrue(result.isUncertain)
+        XCTAssertEqual(result.alternatives.last, french)
+    }
+
+    func testFrenchTextAndLocaleVariantsArePreserved() throws {
+        let text = "À Noël, l’élève goûte une crème brûlée. Est-ce prêt ?"
+        for localeID in ["fr-FR", "fr_FR", "fr-CA"] {
+            let candidate = TranscriptCandidate(localeID: localeID, text: text, confidence: nil, audioCoverage: 1)
+            let result = try XCTUnwrap(LanguageSelector.select([candidate]))
+            XCTAssertEqual(result.best.languageName, "French")
+            XCTAssertEqual(result.best.text, text)
+            XCTAssertFalse(result.isUncertain)
+            XCTAssertEqual(JapanesePunctuation.normalize(text, localeID: localeID), text)
+        }
     }
 
     func testShortcutValidationRejectsTypingAndModifierOnlyKeys() {
@@ -99,7 +166,7 @@ final class KoeTests: XCTestCase {
         let candidate = TranscriptCandidate(localeID: "ja-JP", text: "こんにちは。", confidence: nil, audioCoverage: 1)
         let result = try XCTUnwrap(LanguageSelector.select([candidate]))
         XCTAssertEqual(result.best, candidate)
-        XCTAssertNil(result.alternative)
+        XCTAssertTrue(result.alternatives.isEmpty)
         XCTAssertFalse(result.isUncertain)
     }
 }

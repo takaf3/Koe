@@ -24,7 +24,7 @@ targets:
         CFBundleVersion: '1'
         CFBundleIconFile: Koe
         LSUIElement: true
-        NSMicrophoneUsageDescription: Koe uses your microphone to transcribe English and Japanese speech on this Mac.
+        NSMicrophoneUsageDescription: Koe uses your microphone to transcribe English, Japanese, and French speech on this Mac.
         NSPrincipalClass: NSApplication
     entitlements:
       path: Koe/Koe.entitlements

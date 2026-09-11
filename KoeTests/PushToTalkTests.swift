@@ -161,7 +161,7 @@ final class PushToTalkTests: XCTestCase {
     @MainActor private func makeModel(recorder: TestRecorder,
                                      permission: @escaping @MainActor () async -> Bool = { true }) -> AppModel {
         let model = AppModel(startServices: false, recorder: recorder, microphonePermission: permission)
-        model.models = ["en-US": .installed, "ja-JP": .installed]
+        model.models = ["en-US": .installed, "ja-JP": .installed, "fr-FR": .installed]
         return model
     }
 

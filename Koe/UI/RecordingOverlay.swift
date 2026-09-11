@@ -68,10 +68,16 @@ struct RecordingOverlay: View {
                 Text(model.message).font(.callout).foregroundStyle(.white.opacity(0.8))
                     .fixedSize(horizontal: false, vertical: true)
             } else if let selection = model.selection {
-                Text("Both languages sounded plausible. Select the transcript to use.")
+                Text("The language is uncertain. Select the transcript to use.")
                     .font(.caption).foregroundStyle(.white.opacity(0.65))
-                candidateButton(selection.best)
-                if let alternative = selection.alternative { candidateButton(alternative) }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        candidateButton(selection.best)
+                        ForEach(selection.alternatives, id: \.localeID) { candidate in
+                            candidateButton(candidate)
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }

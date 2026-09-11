@@ -18,12 +18,21 @@ Environment: macOS 26.6.2, Xcode 26.6, Apple silicon. The app uses the macOS 26 
 
 The menu uses the status item's display, explicit content bounds, and a stable scrollable viewport. The installed menu was visually inspected through native UI automation. Automated live insertion verification was inconclusive because the test tool focused an accessibility element without making its application the foreground app; the insertion guard correctly declined to paste. Cross-application insertion, shortcut editing, and launch at login require the interactive acceptance checks below. Synthetic voice fixtures establish the engine integration, not general accuracy for natural speech or mixed-language utterances.
 
+## French support validation on 11 September 2026
+
+- All 37 XCTest cases passed, including French preference persistence, model readiness, three-language selection, missing confidence in the third candidate, and preservation of French accents and punctuation.
+- The Release build passed strict code-signature verification.
+- Apple’s `fr-FR` model was installed through the production installer. A Thomas voice fixture produced “La réunion commence demain matin à 10h. Je vous enverrai les notes après le déjeuner” in both French and Auto-detect modes. Auto-detect selected French without requiring a choice (confidence 0.996 versus 0.280 for Japanese and 0.262 for English).
+- English and Japanese synthesized fixtures also selected their expected languages in the updated three-model Auto-detect mode, without requiring a choice (winning confidence 0.916 and 0.952 respectively). All three models reported installed afterward.
+- The production menu and scrollable three-language chooser were rendered offscreen and visually inspected. All four language segments and all three sample transcripts fit.
+- These checks use synthesized speech; natural French dictation and insertion remain part of the interactive acceptance check.
+
 ## Interactive acceptance check
 
 1. Open `~/Applications/Koe.app`; verify the waveform appears in the menu bar and no Dock icon appears.
 2. Allow microphone access, then enable Koe in Accessibility. Reopen the menu to refresh permission status.
-3. Focus a disposable text document. Hold the shortcut, speak, and release to insert. Repeat in English and Japanese and verify that Return is not sent. The waveform should remain visible while held, followed by a transcribing indicator after release.
-4. Repeat with Auto-detect. A close result should offer the two actual transcripts.
+3. Focus a disposable text document. Hold the shortcut, speak, and release to insert. Repeat in English, Japanese, and French and verify that Return is not sent. The waveform should remain visible while held, followed by a transcribing indicator after release.
+4. Repeat with Auto-detect. A close result should offer all usable transcripts, including French.
 5. Record and press Escape; verify the overlay closes without insertion. Record again to ensure cancellation did not leave the microphone running.
 6. Change the shortcut, then verify the previous shortcut no longer starts Koe and the new one records while held and finishes on release. Escape out of shortcut recording and verify the saved shortcut still works.
 7. Switch to another application during recognition; verify the result is copied rather than inserted there. Within the original app, verify insertion follows the currently focused field even if its web editor recreated the accessibility node.

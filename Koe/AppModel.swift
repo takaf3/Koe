@@ -243,7 +243,7 @@ final class AppModel: ObservableObject {
                 timeout?.cancel()
                 recorder.cleanup()
                 selection = result
-                if requestedMode == .automatic, result.isUncertain, result.alternative != nil {
+                if requestedMode == .automatic, result.isUncertain, !result.alternatives.isEmpty {
                     phase = .choosing
                 } else { deliver(result.best) }
             } catch {

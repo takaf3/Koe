@@ -25,7 +25,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Koe uses your microphone to transcribe English and Japanese speech on this Mac.</string>
+	<string>Koe uses your microphone to transcribe English, Japanese, and French speech on this Mac.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

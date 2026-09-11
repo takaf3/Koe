@@ -3,12 +3,13 @@ import Foundation
 enum ModelAvailability: Sendable { case unsupported, supported, downloading, installed }
 
 enum LanguageMode: String, CaseIterable, Codable, Identifiable, Sendable {
-    case japanese, english, automatic
+    case automatic, japanese, english, french
     var id: String { rawValue }
     var title: String {
         switch self {
         case .japanese: "Japanese"
         case .english: "English"
+        case .french: "French"
         case .automatic: "Auto-detect"
         }
     }
@@ -16,14 +17,24 @@ enum LanguageMode: String, CaseIterable, Codable, Identifiable, Sendable {
         switch self {
         case .japanese: "日本語"
         case .english: "English"
+        case .french: "Français"
         case .automatic: "Auto"
+        }
+    }
+    var detail: String {
+        switch self {
+        case .japanese: "日本語の音声を、このMacで文字にします。"
+        case .english: "Speak English. Transcription stays on this Mac."
+        case .french: "Parlez français. La transcription reste sur ce Mac."
+        case .automatic: "English, Japanese, or French, chosen per recording."
         }
     }
     var localeIDs: [String] {
         switch self {
         case .japanese: ["ja-JP"]
         case .english: ["en-US"]
-        case .automatic: ["en-US", "ja-JP"]
+        case .french: ["fr-FR"]
+        case .automatic: ["en-US", "ja-JP", "fr-FR"]
         }
     }
 }
@@ -34,7 +45,14 @@ struct TranscriptCandidate: Sendable, Equatable {
     let confidence: Double?
     let audioCoverage: Double
 
-    var languageName: String { localeID.hasPrefix("ja") ? "Japanese" : "English" }
+    var languageName: String {
+        switch Locale(identifier: localeID).language.languageCode?.identifier {
+        case "ja": "Japanese"
+        case "en": "English"
+        case "fr": "French"
+        default: localeID
+        }
+    }
     var selectionScore: Double {
         // Confidence is an acoustic signal, not a calibrated language probability.
         // Coverage reduces the chance that one confident word beats a full utterance.
@@ -44,7 +62,7 @@ struct TranscriptCandidate: Sendable, Equatable {
 
 struct TranscriptSelection: Sendable {
     let best: TranscriptCandidate
-    let alternative: TranscriptCandidate?
+    let alternatives: [TranscriptCandidate]
     let isUncertain: Bool
 }
 
@@ -57,10 +75,10 @@ enum LanguageSelector {
             return $0.selectionScore > $1.selectionScore
         }
         guard let best = usable.first else { return nil }
-        let alternative = usable.dropFirst().first
-        let uncertain = alternative.map {
+        let alternatives = Array(usable.dropFirst())
+        let uncertain = alternatives.contains {
             best.confidence == nil || $0.confidence == nil || best.selectionScore - $0.selectionScore < 0.065
-        } ?? false
-        return TranscriptSelection(best: best, alternative: alternative, isUncertain: uncertain)
+        }
+        return TranscriptSelection(best: best, alternatives: alternatives, isUncertain: uncertain)
     }
 }

@@ -27,10 +27,12 @@ struct MenuView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Picker("Language", selection: $model.mode) {
-                        ForEach(LanguageMode.allCases) { mode in Text(mode.title).tag(mode) }
+                        ForEach(LanguageMode.allCases) { mode in
+                            Text(mode == .automatic ? mode.shortTitle : mode.title).tag(mode)
+                                .accessibilityLabel(mode.title)
+                        }
                     }.pickerStyle(.segmented).labelsHidden().disabled(model.phase.isBusy || model.installing)
-                    Text(model.mode == .automatic ? "English or Japanese, chosen per recording." :
-                            (model.mode == .japanese ? "日本語の音声を、このMacで文字にします。" : "Speak English. Transcription stays on this Mac."))
+                    Text(model.mode.detail)
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -87,6 +89,7 @@ struct MenuView: View {
                     }
                     modelRow("English", id: "en-US")
                     modelRow("Japanese · 日本語", id: "ja-JP")
+                    modelRow("French · Français", id: "fr-FR")
                     if model.installing {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)

@@ -7,7 +7,7 @@ import SwiftUI
         _ = NSApplication.shared
         NSApplication.shared.setActivationPolicy(.accessory)
         let model = AppModel(startServices: false)
-        model.models = ["en-US": .installed, "ja-JP": .installed]
+        model.models = ["en-US": .installed, "ja-JP": .installed, "fr-FR": .installed]
         model.checkingModels = false
         try render(MenuView(model: model).background(Color(nsColor: .windowBackgroundColor)),
                    size: NSSize(width: 370, height: 620), name: "menu")
@@ -28,7 +28,8 @@ import SwiftUI
         try render(RecordingOverlay(model: model), size: OverlayLayout.size(for: .message), name: "copied")
         model.phase = .choosing
         model.selection = .init(best: .init(localeID: "en-US", text: "Hello, how are you?", confidence: 0.80, audioCoverage: 1),
-                                alternative: .init(localeID: "ja-JP", text: "こんにちは、お元気ですか？", confidence: 0.79, audioCoverage: 1),
+                                alternatives: [.init(localeID: "ja-JP", text: "こんにちは、お元気ですか？", confidence: 0.79, audioCoverage: 1),
+                                               .init(localeID: "fr-FR", text: "Bonjour, comment allez-vous ?", confidence: 0.78, audioCoverage: 1)],
                                 isUncertain: true)
         try render(RecordingOverlay(model: model), size: OverlayLayout.size(for: .choosing), name: "language-choice")
     }

@@ -112,7 +112,7 @@ final class RecoveryAndInsertionTests: XCTestCase {
                                      timeout: Duration? = nil) -> AppModel {
         let model = AppModel(startServices: false, recorder: recorder, speech: speech,
                              transcriptionTimeout: timeout, microphonePermission: { true })
-        model.models = ["en-US": .installed, "ja-JP": .installed]
+        model.models = ["en-US": .installed, "ja-JP": .installed, "fr-FR": .installed]
         return model
     }
 
@@ -141,7 +141,7 @@ private actor SuspendedSpeech: SpeechProcessing {
     var callCount = 0
     var returnedCount = 0
     private var continuations: [CheckedContinuation<TranscriptSelection, any Error>] = []
-    func statuses() -> [String: ModelAvailability] { ["en-US": .installed, "ja-JP": .installed] }
+    func statuses() -> [String: ModelAvailability] { ["en-US": .installed, "ja-JP": .installed, "fr-FR": .installed] }
     func install(mode: LanguageMode) {}
     func transcribe(url: URL, mode: LanguageMode) async throws -> TranscriptSelection {
         callCount += 1

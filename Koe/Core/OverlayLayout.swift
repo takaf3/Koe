@@ -3,7 +3,7 @@ import Foundation
 enum OverlayLayout {
     static func size(for phase: DictationPhase) -> CGSize {
         switch phase {
-        case .choosing: CGSize(width: 376, height: 276)
+        case .choosing: CGSize(width: 376, height: 376)
         case .failure: CGSize(width: 320, height: 124)
         default: CGSize(width: 216, height: 52)
         }
