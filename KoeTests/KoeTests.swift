@@ -197,6 +197,28 @@ final class KoeTests: XCTestCase {
         XCTAssertNil(model.readinessProblem)
     }
 
+    @MainActor func testAddingLanguagesDownloadsTheirModelsEvenWhileADownloadIsRunning() async throws {
+        let suite = "KoeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let speech = InstallingSpeech()
+        let model = AppModel(defaults: defaults, startServices: false, preferredLanguages: ["en-US"], speech: speech)
+        defer { model.hotKey.invalidate() }
+        await model.refreshModels()
+        XCTAssertEqual(model.models, ["en-US": .installed])
+        model.enableLanguage("de-DE")
+        model.enableLanguage("ko-KR")
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while model.models["de-DE"] != .installed || model.models["ko-KR"] != .installed || model.installing {
+            XCTAssertLessThan(ContinuousClock.now, deadline, "Both added languages should finish installing")
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let installed = await speech.installed
+        XCTAssertEqual(installed, ["de-DE", "ko-KR"])
+        XCTAssertTrue(model.downloadableLocaleIDs.isEmpty)
+        XCTAssertNil(model.setupError)
+    }
+
     func testUncertaintyMarginWidensWithMoreLanguages() throws {
         XCTAssertEqual(LanguageSelector.uncertaintyMargin(candidateCount: 1), 0.065)
         XCTAssertEqual(LanguageSelector.uncertaintyMargin(candidateCount: 2), 0.065)
@@ -305,4 +327,18 @@ final class KoeTests: XCTestCase {
         XCTAssertTrue(result.alternatives.isEmpty)
         XCTAssertFalse(result.isUncertain)
     }
+}
+
+/// Reports every locale as downloadable until `install` is called for it.
+private actor InstallingSpeech: SpeechProcessing {
+    private(set) var installed: [String] = []
+    func supportedLocaleIDs() -> [String] { ["en-US", "de-DE", "ko-KR"] }
+    func statuses(localeIDs: [String]) -> [String: ModelAvailability] {
+        Dictionary(uniqueKeysWithValues: localeIDs.map { ($0, $0 == "en-US" || installed.contains($0) ? .installed : .supported) })
+    }
+    func install(localeIDs: [String]) async throws {
+        try await Task.sleep(for: .milliseconds(20))
+        installed += localeIDs
+    }
+    func transcribe(url: URL, localeIDs: [String]) async throws -> TranscriptSelection { throw SpeechFailure.noSpeech }
 }

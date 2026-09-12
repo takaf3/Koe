@@ -23,7 +23,7 @@ bash scripts/install.sh
 
 The app is installed into `~/Applications/Koe.app`. Click the waveform in the menu bar.
 
-1. Under **Languages**, enable the languages you dictate in. A fresh install starts with your Mac’s preferred language plus English; use **Add language** for any other language Apple’s on-device recognizer supports (English, French, German, Italian, Spanish, Portuguese, Japanese, Korean, Chinese, and Cantonese, in several regional variants on macOS 26). Download the language models if prompted. **Auto** (Auto-detect) is selected by default; the picker also offers each enabled language on its own.
+1. Under **Languages**, enable the languages you dictate in. A fresh install starts with your Mac’s preferred language plus English; use **Add language** for any other language Apple’s on-device recognizer supports (English, French, German, Italian, Spanish, Portuguese, Japanese, Korean, Chinese, and Cantonese, in several regional variants on macOS 26). Adding a language downloads its model right away; the **Download** button covers models that failed or were evicted. **Auto** (Auto-detect) is selected by default; the picker also offers each enabled language on its own, and becomes a labelled pop-up once more than three languages are enabled.
 2. Allow microphone access and enable Accessibility for Koe using the buttons in the menu.
 3. Click the shortcut button and press your preferred combination. The default is **Control–Option–Space**. Shortcuts must include Control, Option, or Command and a regular key; modifier-only/Fn-only shortcuts are not supported. Conflicting shortcuts are rejected and the previous shortcut remains active.
 4. Focus a text field in another app. **Hold the shortcut while speaking, then release it to finish.** A small floating waveform shows microphone activity and elapsed time. On release, the bar shows “Transcribing…” until insertion completes. The HUD stays 216×52 points through setup, recording, transcription, and the brief “Inserted”, “Sent”, or “Copied” confirmation. Destination details appear under **Last dictation** in the menu and in the confirmation’s tooltip. **Escape** or the bar’s × button discards the recording.
@@ -65,7 +65,15 @@ xcodebuild -project Koe.xcodeproj -scheme Koe \
 
 Open `Koe.xcodeproj` in Xcode to develop. To regenerate the project after changing `project.yml`, run `xcodegen generate`.
 
-The local build uses ad-hoc signing and is not notarized for distribution. Rebuilding may require re-enabling Koe in Privacy & Security settings. For distribution, set your signing team and Developer ID, then notarize the app.
+Builds default to ad-hoc signing. To use a stable Apple development identity on your Mac, add your enrolled account in Xcode and create `Config/Signing.xcconfig.local` (ignored by Git):
+
+```xcconfig
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+CODE_SIGN_IDENTITY = Apple Development
+CODE_SIGN_STYLE = Automatic
+```
+
+Build once in Xcode with automatic signing, or run `xcodebuild -project Koe.xcodeproj -scheme Koe -configuration Release -derivedDataPath .derivedData -destination 'generic/platform=macOS' -allowProvisioningUpdates build` to provision the development certificate. Subsequent builds and `scripts/install.sh` reuse these local signing settings. Switching from ad-hoc signing may require granting Microphone and Accessibility access again; later builds retain the same signing identity. These builds are not notarized for distribution. For distribution, use Developer ID signing and notarize the app.
 
 The fixture tool exercises the same production recognizer without recording the microphone or inserting text:
 

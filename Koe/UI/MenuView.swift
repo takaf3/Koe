@@ -158,10 +158,19 @@ struct MenuView: View {
             ForEach(options, id: \.self) { mode in
                 Text(segmentTitle(mode)).tag(mode).accessibilityLabel(accessibilityTitle(mode))
             }
-        }.labelsHidden().disabled(model.phase.isBusy || model.installing)
+        }.disabled(model.phase.isBusy || model.installing)
         return Group {
-            // A segmented control stays legible up to four segments; longer lists get a pop-up.
-            if options.count <= 4 { picker.pickerStyle(.segmented) } else { picker.pickerStyle(.menu) }
+            // A segmented control stays legible up to four segments; longer lists get a labelled pop-up,
+            // since "Auto" on its own does not say what it is choosing between.
+            if options.count <= 4 {
+                picker.pickerStyle(.segmented).labelsHidden()
+            } else {
+                HStack {
+                    Text("Language")
+                    Spacer()
+                    picker.pickerStyle(.menu).labelsHidden().fixedSize()
+                }
+            }
         }
     }
 
@@ -171,7 +180,7 @@ struct MenuView: View {
     }
 
     private func segmentTitle(_ mode: LanguageMode) -> String {
-        guard let id = mode.localeID else { return "Auto" }
+        guard let id = mode.localeID else { return model.enabledLocaleIDs.count > 3 ? "Auto-detect" : "Auto" }
         return LanguageCatalog.shortTitle(for: id, in: model.enabledLocaleIDs)
     }
 
@@ -183,7 +192,7 @@ struct MenuView: View {
         } label: {
             Label("Add language", systemImage: "plus.circle").font(.caption)
         }.menuStyle(.borderlessButton).fixedSize()
-            .disabled(model.availableLocaleIDs.isEmpty || model.phase.isBusy || model.installing)
+            .disabled(model.availableLocaleIDs.isEmpty || model.phase.isBusy)
             .accessibilityLabel("Add language")
     }
 

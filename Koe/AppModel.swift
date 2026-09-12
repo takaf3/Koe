@@ -57,6 +57,7 @@ final class AppModel: ObservableObject {
     private var sessionMode: LanguageMode = .automatic
     private var sessionLocaleIDs: [String] = []
     private var refreshGeneration = 0
+    private var downloadQueued = false
     private var target: InsertionTarget?
     private var operation: Task<Void, Never>?
     private var ticker: Task<Void, Never>?
@@ -171,7 +172,12 @@ final class AppModel: ObservableObject {
     func enableLanguage(_ id: String) {
         guard !enabledLocaleIDs.contains(id) else { return }
         enabledLocaleIDs.append(id)
-        Task { [weak self] in await self?.refreshModels() }
+        Task { [weak self] in
+            guard let self else { return }
+            await refreshModels()
+            // A newly added language is only useful once its model is here, so start the download right away.
+            if models[id] == .supported { downloadModels() }
+        }
     }
 
     func disableLanguage(_ id: String) {
@@ -180,15 +186,30 @@ final class AppModel: ObservableObject {
         models[id] = nil
     }
 
+    /// Installs every enabled model Apple can download. Languages added while a download is
+    /// running are picked up on the next pass; each locale is attempted at most once per run.
     func downloadModels() {
-        guard !installing, !phase.isBusy else { return }
+        guard !phase.isBusy else { return }
+        guard !installing else { downloadQueued = true; return }
         installing = true
         setupError = nil
-        let requested = downloadableLocaleIDs
+        downloadQueued = false
         downloadTask = Task { [weak self] in
             guard let self else { return }
-            do { try await speech.install(localeIDs: requested) }
-            catch { setupError = "Language download failed: \(error.localizedDescription)" }
+            var attempted: Set<String> = []
+            repeat {
+                downloadQueued = false
+                let requested = downloadableLocaleIDs.filter { !attempted.contains($0) }
+                guard !requested.isEmpty else { break }
+                attempted.formUnion(requested)
+                do { try await speech.install(localeIDs: requested) }
+                catch {
+                    guard !Task.isCancelled else { break }
+                    setupError = "Language download failed: \(error.localizedDescription)"
+                    break
+                }
+                await refreshModels()
+            } while downloadQueued && !Task.isCancelled
             installing = false
             await refreshModels()
         }
