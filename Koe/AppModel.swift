@@ -94,7 +94,9 @@ final class AppModel: ObservableObject {
         if enabled.isEmpty { enabled = ["en-US"] }
         enabledLocaleIDs = enabled
         mode = restoredMode
-        if let storedLanguages, storedLanguages != enabled { defaults.set(enabled, forKey: "enabledLanguages") }
+        // Persist the resolved list, including fresh-install defaults: a saved "languageMode" without a saved
+        // list would otherwise be mistaken for a legacy install at the next launch.
+        if storedLanguages != enabled { defaults.set(enabled, forKey: "enabledLanguages") }
         if let data = defaults.data(forKey: "shortcut"), let saved = try? JSONDecoder().decode(HotKey.self, from: data), saved.isValid {
             shortcut = saved
         } else { shortcut = .initial }

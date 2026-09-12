@@ -86,7 +86,22 @@ final class KoeTests: XCTestCase {
         XCTAssertEqual(model.mode, .automatic)
         XCTAssertEqual(model.enabledLocaleIDs, ["ja-JP", "en-US"])
         XCTAssertEqual(model.activeLocaleIDs, ["ja-JP", "en-US"])
-        XCTAssertEqual(defaults.stringArray(forKey: "enabledLanguages"), nil, "Defaults are only persisted once the user changes them")
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledLanguages"), ["ja-JP", "en-US"], "The resolved defaults are persisted")
+    }
+
+    @MainActor func testFreshInstallSurvivesAModeChangeAndRestartWithoutLegacyMigration() throws {
+        let suite = "KoeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppModel(defaults: defaults, startServices: false, preferredLanguages: ["de-DE"])
+        defer { model.hotKey.invalidate() }
+        XCTAssertEqual(model.enabledLocaleIDs, ["de-DE", "en-US"])
+        model.mode = .fixed("de-DE")
+        model.mode = .automatic
+        let restarted = AppModel(defaults: defaults, startServices: false, preferredLanguages: ["de-DE"])
+        defer { restarted.hotKey.invalidate() }
+        XCTAssertEqual(restarted.enabledLocaleIDs, ["de-DE", "en-US"], "A saved mode alone must not trigger the legacy English/Japanese/French migration")
+        XCTAssertEqual(restarted.mode, .automatic)
     }
 
     @MainActor func testUpgradeFromFixedLanguagesKeepsAllThreeAndTheSavedMode() throws {
