@@ -7,10 +7,20 @@ import SwiftUI
         _ = NSApplication.shared
         NSApplication.shared.setActivationPolicy(.accessory)
         let model = AppModel(startServices: false)
+        model.supportedLocaleIDs = LanguageCatalog.sorted(["en-US", "ja-JP", "fr-FR", "de-DE", "es-ES", "ko-KR"])
+        for id in ["en-US", "ja-JP", "fr-FR"] where !model.enabledLocaleIDs.contains(id) { model.enableLanguage(id) }
         model.models = ["en-US": .installed, "ja-JP": .installed, "fr-FR": .installed]
         model.checkingModels = false
         try render(MenuView(model: model).background(Color(nsColor: .windowBackgroundColor)),
                    size: NSSize(width: 370, height: 620), name: "menu")
+        // Auto-detect with more languages than it handles well: pop-up picker, warning, and a pending download.
+        for id in ["de-DE", "es-ES", "ko-KR"] { model.enableLanguage(id) }
+        model.models["de-DE"] = .installed
+        model.models["es-ES"] = .supported
+        model.models["ko-KR"] = .unsupported
+        try render(MenuView(model: model).background(Color(nsColor: .windowBackgroundColor)),
+                   size: NSSize(width: 370, height: 620), name: "menu-many-languages")
+        for id in ["de-DE", "es-ES", "ko-KR"] { model.disableLanguage(id) }
         model.phase = .recording
         model.level = 0.65
         model.levelHistory = (0..<23).map { 0.1 + abs(sin(Double($0) * 0.7)) * 0.75 }
@@ -36,7 +46,7 @@ import SwiftUI
 
     @MainActor static func render<V: View>(_ content: V, size: NSSize, name: String) throws {
         let view = NSHostingView(rootView: content)
-        view.appearance = NSAppearance(named: name == "menu" ? .aqua : .darkAqua)
+        view.appearance = NSAppearance(named: name.hasPrefix("menu") ? .aqua : .darkAqua)
         view.frame = NSRect(origin: .zero, size: size)
         view.layoutSubtreeIfNeeded()
         guard let image = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }

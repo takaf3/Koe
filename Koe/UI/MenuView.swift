@@ -26,14 +26,13 @@ struct MenuView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Picker("Language", selection: $model.mode) {
-                        ForEach(LanguageMode.allCases) { mode in
-                            Text(mode == .automatic ? mode.shortTitle : mode.title).tag(mode)
-                                .accessibilityLabel(mode.title)
-                        }
-                    }.pickerStyle(.segmented).labelsHidden().disabled(model.phase.isBusy || model.installing)
-                    Text(model.mode.detail)
+                    languagePicker
+                    Text(model.modeDetail)
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    if let warning = model.automaticWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle")
+                            .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -78,7 +77,7 @@ struct MenuView: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text("Offline languages").fontWeight(.medium)
+                        Text("Languages").fontWeight(.medium)
                         Spacer()
                         if model.checkingModels { ProgressView().controlSize(.mini) }
                         else {
@@ -87,9 +86,10 @@ struct MenuView: View {
                                 .accessibilityLabel("Refresh language availability")
                         }
                     }
-                    modelRow("English", id: "en-US")
-                    modelRow("Japanese · 日本語", id: "ja-JP")
-                    modelRow("French · Français", id: "fr-FR")
+                    ForEach(model.enabledLocaleIDs, id: \.self) { id in
+                        modelRow(LanguageCatalog.title(for: id, in: model.supportedLocaleIDs), id: id)
+                    }
+                    addLanguageMenu
                     if model.installing {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
@@ -97,15 +97,16 @@ struct MenuView: View {
                         }
                         Text("This can take a few minutes. You can close this menu.")
                             .font(.caption).foregroundStyle(.secondary)
-                    } else if !model.modelsReady {
-                        Button("Download \(model.mode == .automatic ? "language models" : model.mode.title + " model")") {
-                            model.downloadModels()
-                        }.buttonStyle(.bordered).disabled(model.phase.isBusy || model.checkingModels)
+                    } else if !model.downloadableLocaleIDs.isEmpty {
+                        Button(downloadTitle) { model.downloadModels() }
+                            .buttonStyle(.bordered).disabled(model.phase.isBusy || model.checkingModels)
                         Text("One-time internet connection for Apple’s models. Dictation then works offline.")
                             .font(.caption).foregroundStyle(.secondary)
-                    } else {
+                    } else if model.modelsReady {
                         Label("Ready without an internet connection", systemImage: "checkmark.shield")
                             .font(.caption).foregroundStyle(.secondary)
+                    } else if !model.checkingModels, let problem = model.readinessProblem {
+                        Text(problem).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                     }
                     if let error = model.setupError { errorText(error) }
                 }
@@ -151,9 +152,49 @@ struct MenuView: View {
         .accessibilityIdentifier("koe.menu")
     }
 
+    private var languagePicker: some View {
+        let options: [LanguageMode] = [.automatic] + model.enabledLocaleIDs.map { .fixed($0) }
+        let picker = Picker("Language", selection: $model.mode) {
+            ForEach(options, id: \.self) { mode in
+                Text(segmentTitle(mode)).tag(mode).accessibilityLabel(accessibilityTitle(mode))
+            }
+        }.labelsHidden().disabled(model.phase.isBusy || model.installing)
+        return Group {
+            // A segmented control stays legible up to four segments; longer lists get a pop-up.
+            if options.count <= 4 { picker.pickerStyle(.segmented) } else { picker.pickerStyle(.menu) }
+        }
+    }
+
+    private func accessibilityTitle(_ mode: LanguageMode) -> String {
+        guard let id = mode.localeID else { return mode.title }
+        return LanguageCatalog.name(for: id, in: model.enabledLocaleIDs)
+    }
+
+    private func segmentTitle(_ mode: LanguageMode) -> String {
+        guard let id = mode.localeID else { return "Auto" }
+        return LanguageCatalog.shortTitle(for: id, in: model.enabledLocaleIDs)
+    }
+
+    private var addLanguageMenu: some View {
+        Menu {
+            ForEach(model.availableLocaleIDs, id: \.self) { id in
+                Button(LanguageCatalog.title(for: id, in: model.supportedLocaleIDs)) { model.enableLanguage(id) }
+            }
+        } label: {
+            Label("Add language", systemImage: "plus.circle").font(.caption)
+        }.menuStyle(.borderlessButton).fixedSize()
+            .disabled(model.availableLocaleIDs.isEmpty || model.phase.isBusy || model.installing)
+            .accessibilityLabel("Add language")
+    }
+
+    private var downloadTitle: String {
+        let ids = model.downloadableLocaleIDs
+        return ids.count == 1 ? "Download \(LanguageCatalog.languageName(for: ids[0])) model" : "Download language models"
+    }
+
     private func modelRow(_ title: String, id: String) -> some View {
-        HStack {
-            Text(title).foregroundStyle(.secondary)
+        HStack(spacing: 6) {
+            Text(title).foregroundStyle(.secondary).lineLimit(1)
             Spacer()
             switch model.models[id] {
             case .installed: Label("Ready", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
@@ -162,6 +203,11 @@ struct MenuView: View {
             case .unsupported: Text("Unavailable").foregroundStyle(.orange)
             default: Text(model.checkingModels ? "Checking…" : "Unavailable").foregroundStyle(.secondary)
             }
+            Button { model.disableLanguage(id) } label: { Image(systemName: "minus.circle") }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .disabled(model.enabledLocaleIDs.count == 1 || model.phase.isBusy || model.installing)
+                .help("Remove \(LanguageCatalog.languageName(for: id))")
+                .accessibilityLabel("Remove \(LanguageCatalog.languageName(for: id))")
         }.font(.caption)
     }
 

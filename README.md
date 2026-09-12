@@ -1,6 +1,6 @@
 # Koe
 
-A native macOS menu bar dictation app for English, Japanese, and French. Hold a configurable shortcut while speaking, then release it to transcribe with Apple Speech and insert the result at your cursor. No Dock icon, account, API key, subscription, or server transcription.
+A native macOS menu bar dictation app. Hold a configurable shortcut while speaking, then release it to transcribe with Apple Speech and insert the result at your cursor. No Dock icon, account, API key, subscription, or server transcription.
 
 <p align="center">
   <img src="docs/assets/koe-demo.gif" alt="Koe’s live waveform reacts to speech while recording, then displays Sent when dictation finishes." width="960">
@@ -12,7 +12,7 @@ A native macOS menu bar dictation app for English, Japanese, and French. Hold a 
 
 - macOS 26 or newer on an Apple silicon Mac supported by `SpeechTranscriber`.
 - Microphone access. Accessibility access enables insertion into other apps; without it, results are copied to the clipboard.
-- A one-time internet connection to install Apple’s English, Japanese, and French language models. Apple manages these shared system assets and may update or evict them. Koe checks availability and never falls back to a cloud recognizer.
+- A one-time internet connection to install Apple’s language model for each language you enable. Apple manages these shared system assets and may update or evict them. Koe checks availability and never falls back to a cloud recognizer.
 - Xcode 26 or newer to build. No third-party libraries are required. XcodeGen is only needed if you change `project.yml` and regenerate the checked-in Xcode project.
 
 ## Install and use
@@ -23,7 +23,7 @@ bash scripts/install.sh
 
 The app is installed into `~/Applications/Koe.app`. Click the waveform in the menu bar.
 
-1. **Auto** (Auto-detect) is selected by default and appears first. You can also select **Japanese**, **English**, or **French**. Download the language models if prompted.
+1. Under **Languages**, enable the languages you dictate in. A fresh install starts with your Mac’s preferred language plus English; use **Add language** for any other language Apple’s on-device recognizer supports (English, French, German, Italian, Spanish, Portuguese, Japanese, Korean, Chinese, and Cantonese, in several regional variants on macOS 26). Download the language models if prompted. **Auto** (Auto-detect) is selected by default; the picker also offers each enabled language on its own.
 2. Allow microphone access and enable Accessibility for Koe using the buttons in the menu.
 3. Click the shortcut button and press your preferred combination. The default is **Control–Option–Space**. Shortcuts must include Control, Option, or Command and a regular key; modifier-only/Fn-only shortcuts are not supported. Conflicting shortcuts are rejected and the previous shortcut remains active.
 4. Focus a text field in another app. **Hold the shortcut while speaking, then release it to finish.** A small floating waveform shows microphone activity and elapsed time. On release, the bar shows “Transcribing…” until insertion completes. The HUD stays 216×52 points through setup, recording, transcription, and the brief “Inserted”, “Sent”, or “Copied” confirmation. Destination details appear under **Last dictation** in the menu and in the confirmation’s tooltip. **Escape** or the bar’s × button discards the recording.
@@ -36,9 +36,13 @@ You can enable **Launch at login** from the menu. Closing the menu leaves Koe ru
 
 ## Language behavior
 
-English uses `en-US`, Japanese uses `ja-JP`, and French uses `fr-FR`. Fixed-language modes require only their selected model and perform one recognition pass. Auto-detect requires all three models; existing users need to download the French model before using Auto-detect again. Auto-detect evaluates the same audio with all three Apple models locally and compares duration-weighted acoustic confidence and recognized audio coverage. Clear results are inserted automatically. Close scores or missing confidence show all usable transcripts so you can choose.
+The language list comes from Apple’s `SpeechTranscriber.supportedLocales` on your Mac, so it grows as Apple adds languages. Regional variants of one language share a model. Selecting a single language performs one recognition pass with that model. Auto-detect evaluates the same audio with the model of every enabled language, one after another, and compares duration-weighted acoustic confidence and recognized audio coverage. Clear results are inserted automatically. Close scores or missing confidence show all usable transcripts so you can choose.
+
+Auto-detect works best with two or three languages. Each enabled language adds a full recognition pass, so transcription time grows in step with the list, and every extra model is another chance of a plausible-looking wrong transcript. Related languages are the hardest case: the French model transcribes an English sentence with fairly high confidence, whereas English and Japanese are rarely confused. Koe widens its “ask me” margin slightly as the list grows and shows a warning in the menu once more than three languages are enabled with Auto-detect. Removing the language currently selected in the picker switches the picker back to Auto-detect; the last enabled language cannot be removed.
 
 Apple’s API takes a fixed locale; this comparison is an application heuristic, not an Apple audio-language detector. Confidence scores across locales are not calibrated. Very short, ambiguous, or mixed-language speech may need manual language selection. Auto-detect selects one primary language per recording and takes longer than a fixed mode. The app transcribes after you finish speaking, rather than displaying live words.
+
+Upgrading from a build with fixed English, Japanese, and French keeps all three enabled and keeps your saved language selection.
 
 Japanese punctuation comes from Apple’s recognizer. It can produce question marks, but sometimes uses `。` even for direct questions. Koe applies a small offline writing-style correction to sentence endings such as `ですか`, `ますか`, and `でしょうか`, using `？` when Apple supplied a full stop or no terminal punctuation. This also applies to Japanese candidates in Auto-detect. Existing question marks, ordinary statements, quoted questions, and common acknowledgements such as `そうですか。` are preserved. This rule is deliberately limited: casual questions distinguished only by intonation (for example, `明日来る？`) still depend on Apple’s recognition. It does not infer intent or rewrite sentence wording.
 
@@ -70,15 +74,15 @@ mkdir -p build
 xcrun swiftc -swift-version 6 -parse-as-library -o build/speech-check \
   Koe/Core/LanguageMode.swift Koe/Core/RecordingPolicy.swift Koe/Core/JapanesePunctuation.swift \
   Koe/Services/AudioClipValidator.swift Koe/Services/SpeechService.swift Tools/SpeechCheck.swift
-build/speech-check                       # Inspect on-device model availability.
-build/speech-check --install             # Install English, Japanese, and French models.
+build/speech-check                            # List every supported locale and its model status.
+build/speech-check --install en-US ja-JP      # Install models for the given locales.
 say -v Samantha -o build/english.aiff 'The meeting starts tomorrow morning at ten.'
 say -v Kyoko -o build/japanese.aiff '明日の会議は午前十時からです。'
-build/speech-check build/english.aiff automatic
-build/speech-check build/japanese.aiff automatic
+build/speech-check build/english.aiff en-US ja-JP    # Auto-detect across the listed locales.
+build/speech-check build/japanese.aiff en-US ja-JP
 say -v Thomas -o build/french.aiff 'La réunion commence demain matin à dix heures.'
-build/speech-check build/french.aiff french
-build/speech-check build/french.aiff automatic
+build/speech-check build/french.aiff fr-FR           # One locale is a fixed-language pass.
+build/speech-check build/french.aiff en-US ja-JP fr-FR
 ```
 
 ## Apple references
