@@ -41,37 +41,210 @@ final class KoeTests: XCTestCase {
         XCTAssertFalse(key.suspended)
     }
 
-    func testLanguageModesIncludeFrench() {
-        XCTAssertEqual(LanguageMode.allCases, [.automatic, .japanese, .english, .french])
-        XCTAssertEqual(LanguageMode.automatic.localeIDs, ["en-US", "ja-JP", "fr-FR"])
-        XCTAssertEqual(LanguageMode.japanese.localeIDs, ["ja-JP"])
-        XCTAssertEqual(LanguageMode.english.localeIDs, ["en-US"])
-        XCTAssertEqual(LanguageMode.french.localeIDs, ["fr-FR"])
+    func testLanguageModeStorageMigratesLegacyNames() {
+        XCTAssertEqual(LanguageMode(storageValue: nil), .automatic)
+        XCTAssertEqual(LanguageMode(storageValue: "automatic"), .automatic)
+        XCTAssertEqual(LanguageMode(storageValue: "japanese"), .fixed("ja-JP"))
+        XCTAssertEqual(LanguageMode(storageValue: "english"), .fixed("en-US"))
+        XCTAssertEqual(LanguageMode(storageValue: "french"), .fixed("fr-FR"))
+        XCTAssertEqual(LanguageMode(storageValue: "de-DE"), .fixed("de-DE"))
+        XCTAssertEqual(LanguageMode.fixed("ko-KR").storageValue, "ko-KR")
+        XCTAssertEqual(LanguageMode.automatic.localeIDs(enabled: ["ja-JP", "en-US"]), ["ja-JP", "en-US"])
+        XCTAssertEqual(LanguageMode.fixed("ja-JP").localeIDs(enabled: ["ja-JP", "en-US"]), ["ja-JP"])
     }
 
-    @MainActor func testFrenchPreferencePersistsAndReadinessUsesSelectedModels() throws {
+    func testDefaultLanguagesFollowSystemPreferencesPlusEnglish() {
+        XCTAssertEqual(LanguageCatalog.defaultLocaleIDs(preferredLanguages: ["ja-JP", "en-JP"]), ["ja-JP", "en-US"])
+        XCTAssertEqual(LanguageCatalog.defaultLocaleIDs(preferredLanguages: ["en-GB"]), ["en-GB"])
+        XCTAssertEqual(LanguageCatalog.defaultLocaleIDs(preferredLanguages: ["de-DE", "fr-CH", "it-IT"]), ["de-DE", "fr-CH", "en-US"])
+        XCTAssertEqual(LanguageCatalog.defaultLocaleIDs(preferredLanguages: ["zh-Hant-TW", "zh-Hans-CN"]), ["zh-TW", "zh-CN", "en-US"])
+        XCTAssertEqual(LanguageCatalog.defaultLocaleIDs(preferredLanguages: ["sv-SE"]), ["en-US"])
+        XCTAssertEqual(LanguageCatalog.defaultLocaleIDs(preferredLanguages: []), ["en-US"])
+        XCTAssertEqual(LanguageCatalog.localeID(matching: "es"), "es-ES")
+        XCTAssertEqual(LanguageCatalog.localeID(matching: "es-AR"), "es-ES")
+        XCTAssertEqual(LanguageCatalog.localeID(matching: "es-MX"), "es-MX")
+    }
+
+    func testLanguageTitlesDistinguishRegionsOnlyWhenNeeded() {
+        let catalog = ["en-US", "en-GB", "ja-JP", "fr-FR"]
+        XCTAssertEqual(LanguageCatalog.title(for: "ja-JP", in: catalog), "Japanese · 日本語")
+        XCTAssertEqual(LanguageCatalog.title(for: "fr-FR", in: catalog), "French · Français")
+        XCTAssertEqual(LanguageCatalog.title(for: "en-US", in: catalog), "English (United States)")
+        XCTAssertEqual(LanguageCatalog.title(for: "en-GB", in: catalog), "English (United Kingdom)")
+        XCTAssertEqual(LanguageCatalog.title(for: "en-US", in: ["en-US", "ja-JP"]), "English")
+        XCTAssertEqual(LanguageCatalog.shortTitle(for: "ja-JP", in: ["ja-JP", "en-US"]), "日本語")
+        XCTAssertEqual(LanguageCatalog.shortTitle(for: "en-GB", in: ["en-US", "en-GB"]), "English (GB)")
+        XCTAssertEqual(LanguageCatalog.sorted(["ja-JP", "en-US", "fr-FR"]), ["en-US", "fr-FR", "ja-JP"])
+    }
+
+    @MainActor func testFreshInstallDefaultsToPreferredLanguagesAndAutoDetect() throws {
         let suite = "KoeTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let model = AppModel(defaults: defaults, startServices: false)
+        let model = AppModel(defaults: defaults, startServices: false, preferredLanguages: ["ja-JP", "en-JP"])
         defer { model.hotKey.invalidate() }
         XCTAssertEqual(model.mode, .automatic)
-        model.models = ["en-US": .installed, "ja-JP": .installed]
-        model.mode = .english
-        XCTAssertTrue(model.modelsReady)
+        XCTAssertEqual(model.enabledLocaleIDs, ["ja-JP", "en-US"])
+        XCTAssertEqual(model.activeLocaleIDs, ["ja-JP", "en-US"])
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledLanguages"), ["ja-JP", "en-US"], "The resolved defaults are persisted")
+    }
+
+    @MainActor func testFreshInstallSurvivesAModeChangeAndRestartWithoutLegacyMigration() throws {
+        let suite = "KoeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppModel(defaults: defaults, startServices: false, preferredLanguages: ["de-DE"])
+        defer { model.hotKey.invalidate() }
+        XCTAssertEqual(model.enabledLocaleIDs, ["de-DE", "en-US"])
+        model.mode = .fixed("de-DE")
         model.mode = .automatic
+        let restarted = AppModel(defaults: defaults, startServices: false, preferredLanguages: ["de-DE"])
+        defer { restarted.hotKey.invalidate() }
+        XCTAssertEqual(restarted.enabledLocaleIDs, ["de-DE", "en-US"], "A saved mode alone must not trigger the legacy English/Japanese/French migration")
+        XCTAssertEqual(restarted.mode, .automatic)
+    }
+
+    @MainActor func testUpgradeFromFixedLanguagesKeepsAllThreeAndTheSavedMode() throws {
+        let suite = "KoeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("french", forKey: "languageMode")
+        let model = AppModel(defaults: defaults, startServices: false, preferredLanguages: ["ko-KR"])
+        defer { model.hotKey.invalidate() }
+        XCTAssertEqual(model.mode, .fixed("fr-FR"))
+        XCTAssertEqual(model.enabledLocaleIDs, ["en-US", "ja-JP", "fr-FR"])
+        XCTAssertEqual(defaults.string(forKey: "languageMode"), "french", "Untouched preferences stay in their old form")
+        model.mode = .automatic
+        XCTAssertEqual(defaults.string(forKey: "languageMode"), "automatic")
+    }
+
+    @MainActor func testEnablingAndRemovingLanguagesPersistsAndKeepsAValidMode() throws {
+        let suite = "KoeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppModel(defaults: defaults, startServices: false, preferredLanguages: ["en-US"])
+        defer { model.hotKey.invalidate() }
+        XCTAssertEqual(model.enabledLocaleIDs, ["en-US"])
+        model.disableLanguage("en-US")
+        XCTAssertEqual(model.enabledLocaleIDs, ["en-US"], "The last language cannot be removed")
+        model.enableLanguage("de-DE")
+        model.enableLanguage("de-DE")
+        model.enableLanguage("ja-JP")
+        XCTAssertEqual(model.enabledLocaleIDs, ["en-US", "de-DE", "ja-JP"])
+        model.mode = .fixed("de-DE")
+        model.models = ["en-US": .installed, "ja-JP": .installed, "de-DE": .supported]
         XCTAssertFalse(model.modelsReady)
-        model.mode = .french
-        XCTAssertFalse(model.modelsReady)
-        model.models = ["fr-FR": .installed]
+        XCTAssertEqual(model.downloadableLocaleIDs, ["de-DE"])
+        model.disableLanguage("de-DE")
+        XCTAssertEqual(model.mode, .automatic, "Removing the fixed language falls back to Auto-detect")
+        XCTAssertEqual(model.enabledLocaleIDs, ["en-US", "ja-JP"])
+        XCTAssertNil(model.models["de-DE"])
         XCTAssertTrue(model.modelsReady)
-        let restored = AppModel(defaults: defaults, startServices: false)
+        let restored = AppModel(defaults: defaults, startServices: false, preferredLanguages: ["ko-KR"])
         defer { restored.hotKey.invalidate() }
-        XCTAssertEqual(restored.mode, .french)
-        model.models["en-US"] = .installed
-        model.models["ja-JP"] = .installed
+        XCTAssertEqual(restored.enabledLocaleIDs, ["en-US", "ja-JP"])
+        XCTAssertEqual(restored.mode, .automatic)
+    }
+
+    @MainActor func testSavedFixedLanguageIsRestoredEvenIfItWasNotEnabled() throws {
+        let suite = "KoeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(["en-US"], forKey: "enabledLanguages")
+        defaults.set("ko-KR", forKey: "languageMode")
+        let model = AppModel(defaults: defaults, startServices: false, preferredLanguages: [])
+        defer { model.hotKey.invalidate() }
+        XCTAssertEqual(model.mode, .fixed("ko-KR"))
+        XCTAssertEqual(model.enabledLocaleIDs, ["en-US", "ko-KR"])
+        XCTAssertEqual(model.activeLocaleIDs, ["ko-KR"])
+    }
+
+    @MainActor func testAutomaticWarningAppearsPastThreeLanguages() throws {
+        let suite = "KoeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(["en-US", "ja-JP", "fr-FR"], forKey: "enabledLanguages")
+        let model = AppModel(defaults: defaults, startServices: false, preferredLanguages: [])
+        defer { model.hotKey.invalidate() }
+        XCTAssertNil(model.automaticWarning)
+        XCTAssertEqual(model.modeDetail, "English, Japanese, and French, chosen per recording.")
+        model.enableLanguage("de-DE")
+        XCTAssertNotNil(model.automaticWarning)
+        model.mode = .fixed("de-DE")
+        XCTAssertNil(model.automaticWarning)
+        XCTAssertEqual(model.modeDetail, "Speak German. Transcription stays on this Mac.")
+    }
+
+    @MainActor func testRegionalVariantsAreNamedApartAndDuplicatesAreDroppedOnLoad() throws {
+        let suite = "KoeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(["en-US", "en-GB", "en-US"], forKey: "enabledLanguages")
+        let model = AppModel(defaults: defaults, startServices: false, preferredLanguages: [])
+        defer { model.hotKey.invalidate() }
+        XCTAssertEqual(model.enabledLocaleIDs, ["en-US", "en-GB"])
+        XCTAssertEqual(defaults.stringArray(forKey: "enabledLanguages"), ["en-US", "en-GB"], "The repaired list is written back")
+        XCTAssertEqual(model.modeDetail, "English (United States) and English (United Kingdom), chosen per recording.")
+        model.mode = .fixed("en-GB")
+        XCTAssertEqual(model.modeDetail, "Speak English (United Kingdom). Transcription stays on this Mac.")
+        XCTAssertEqual(LanguageCatalog.name(for: "ja-JP", in: ["ja-JP", "en-US"]), "Japanese")
+    }
+
+    @MainActor func testReadinessProblemExplainsUnavailableAndDownloadingModels() throws {
+        let suite = "KoeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(["en-US", "ko-KR"], forKey: "enabledLanguages")
+        let model = AppModel(defaults: defaults, startServices: false, preferredLanguages: [])
+        defer { model.hotKey.invalidate() }
+        model.models = ["en-US": .installed, "ko-KR": .unsupported]
+        XCTAssertEqual(model.readinessProblem, "Korean is unavailable on this Mac. Remove it or pick another language.")
+        XCTAssertTrue(model.downloadableLocaleIDs.isEmpty)
+        model.mode = .fixed("en-US")
+        XCTAssertNil(model.readinessProblem)
         model.mode = .automatic
-        XCTAssertTrue(model.modelsReady)
+        model.models["ko-KR"] = .downloading
+        XCTAssertEqual(model.readinessProblem, "Language models are still downloading.")
+        model.models["ko-KR"] = .supported
+        XCTAssertEqual(model.readinessProblem, "Download the enabled language models to start dictating.")
+        XCTAssertEqual(model.downloadableLocaleIDs, ["ko-KR"])
+        model.models["ko-KR"] = .installed
+        XCTAssertNil(model.readinessProblem)
+    }
+
+    @MainActor func testAddingLanguagesDownloadsTheirModelsEvenWhileADownloadIsRunning() async throws {
+        let suite = "KoeTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let speech = InstallingSpeech()
+        let model = AppModel(defaults: defaults, startServices: false, preferredLanguages: ["en-US"], speech: speech)
+        defer { model.hotKey.invalidate() }
+        await model.refreshModels()
+        XCTAssertEqual(model.models, ["en-US": .installed])
+        model.enableLanguage("de-DE")
+        model.enableLanguage("ko-KR")
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while model.models["de-DE"] != .installed || model.models["ko-KR"] != .installed || model.installing {
+            XCTAssertLessThan(ContinuousClock.now, deadline, "Both added languages should finish installing")
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let installed = await speech.installed
+        XCTAssertEqual(installed, ["de-DE", "ko-KR"])
+        XCTAssertTrue(model.downloadableLocaleIDs.isEmpty)
+        XCTAssertNil(model.setupError)
+    }
+
+    func testUncertaintyMarginWidensWithMoreLanguages() throws {
+        XCTAssertEqual(LanguageSelector.uncertaintyMargin(candidateCount: 1), 0.065)
+        XCTAssertEqual(LanguageSelector.uncertaintyMargin(candidateCount: 2), 0.065)
+        XCTAssertEqual(LanguageSelector.uncertaintyMargin(candidateCount: 4), 0.085, accuracy: 1e-9)
+        // A 0.07 score gap is decisive between two languages but a tie among four.
+        let best = TranscriptCandidate(localeID: "en-US", text: "Hello", confidence: 0.90, audioCoverage: 1)
+        let runnerUp = TranscriptCandidate(localeID: "de-DE", text: "Hallo", confidence: 0.82, audioCoverage: 1)
+        let far = TranscriptCandidate(localeID: "ja-JP", text: "ハロー", confidence: 0.3, audioCoverage: 1)
+        let farther = TranscriptCandidate(localeID: "fr-FR", text: "Allô", confidence: 0.2, audioCoverage: 1)
+        XCTAssertFalse(try XCTUnwrap(LanguageSelector.select([best, runnerUp])).isUncertain)
+        XCTAssertTrue(try XCTUnwrap(LanguageSelector.select([best, runnerUp, far, farther])).isUncertain)
     }
 
     func testFrenchWinsAgainstOtherLanguagesAndKeepsAlternatives() throws {
@@ -169,4 +342,18 @@ final class KoeTests: XCTestCase {
         XCTAssertTrue(result.alternatives.isEmpty)
         XCTAssertFalse(result.isUncertain)
     }
+}
+
+/// Reports every locale as downloadable until `install` is called for it.
+private actor InstallingSpeech: SpeechProcessing {
+    private(set) var installed: [String] = []
+    func supportedLocaleIDs() -> [String] { ["en-US", "de-DE", "ko-KR"] }
+    func statuses(localeIDs: [String]) -> [String: ModelAvailability] {
+        Dictionary(uniqueKeysWithValues: localeIDs.map { ($0, $0 == "en-US" || installed.contains($0) ? .installed : .supported) })
+    }
+    func install(localeIDs: [String]) async throws {
+        try await Task.sleep(for: .milliseconds(20))
+        installed += localeIDs
+    }
+    func transcribe(url: URL, localeIDs: [String]) async throws -> TranscriptSelection { throw SpeechFailure.noSpeech }
 }

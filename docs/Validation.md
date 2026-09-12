@@ -27,12 +27,19 @@ The menu uses the status item's display, explicit content bounds, and a stable s
 - The production menu and scrollable three-language chooser were rendered offscreen and visually inspected. All four language segments and all three sample transcripts fit.
 - These checks use synthesized speech; natural French dictation and insertion remain part of the interactive acceptance check.
 
+## Selectable languages validation on 12 September 2026
+
+- All 48 XCTest cases passed, including a fresh install surviving a mode change and restart without legacy migration, automatic model download for added languages (queued while another download runs), legacy `japanese`/`english`/`french` preference migration, fresh-install defaults derived from the system’s preferred languages, adding and removing languages with mode fallback, restoring a saved fixed language that was not in the enabled list, the Auto-detect warning past three languages, region-aware names for two variants of one language, readiness messages for unavailable and downloading models, and the widened uncertainty margin.
+- `speech-check` listed all 30 locales Apple ships on this Mac (ten languages) with their model status. A Kyoko fixture selected Japanese over English (confidence 0.998 versus 0.337) with `en-US ja-JP` enabled. A Samantha fixture selected English with `en-US ja-JP fr-FR` enabled without requiring a choice (0.905 versus 0.743 for French and 0.678 for Japanese); the French model’s relatively high confidence on English speech is the related-language effect described in the README. The same fixture in fixed `ja-JP` mode produced a single pass.
+- The production menu was rendered offscreen with three languages (segmented picker) and with six (pop-up picker, Auto-detect warning, one language pending download, one unavailable) and visually inspected.
+- These checks use synthesized speech; dictation in the newly listed languages remains part of the interactive acceptance check.
+
 ## Interactive acceptance check
 
 1. Open `~/Applications/Koe.app`; verify the waveform appears in the menu bar and no Dock icon appears.
 2. Allow microphone access, then enable Koe in Accessibility. Reopen the menu to refresh permission status.
-3. Focus a disposable text document. Hold the shortcut, speak, and release to insert. Repeat in English, Japanese, and French and verify that Return is not sent. The waveform should remain visible while held, followed by a transcribing indicator after release.
-4. Repeat with Auto-detect. A close result should offer all usable transcripts, including French.
+3. Focus a disposable text document. Hold the shortcut, speak, and release to insert. Repeat in each enabled language and verify that Return is not sent. The waveform should remain visible while held, followed by a transcribing indicator after release.
+4. Repeat with Auto-detect. A close result should offer all usable transcripts. Add a fourth language and confirm the warning appears; remove the language selected in the picker and confirm the picker returns to Auto.
 5. Record and press Escape; verify the overlay closes without insertion. Record again to ensure cancellation did not leave the microphone running.
 6. Change the shortcut, then verify the previous shortcut no longer starts Koe and the new one records while held and finishes on release. Escape out of shortcut recording and verify the saved shortcut still works.
 7. Switch to another application during recognition; verify the result is copied rather than inserted there. Within the original app, verify insertion follows the currently focused field even if its web editor recreated the accessibility node.

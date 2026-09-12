@@ -6,24 +6,32 @@ enum SpeechFailure: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .unsupportedDevice: "On-device transcription is unavailable on this Mac. Koe requires macOS 26 and supported Apple silicon."
-        case .unsupportedLanguage(let name): "Apple’s on-device speech model for \(name) is unavailable on this Mac."
-        case .modelsMissing: "Download the selected language models in Koe before dictating offline."
+        case .unsupportedLanguage(let id): "Apple’s on-device speech model for \(LanguageCatalog.languageName(for: id)) is unavailable on this Mac."
+        case .modelsMissing: "Download the enabled language models in Koe before dictating offline."
         case .noSpeech: "No speech was recognized. Check your microphone and try again."
         }
     }
 }
 
 protocol SpeechProcessing: Sendable {
-    func statuses() async -> [String: ModelAvailability]
-    func install(mode: LanguageMode) async throws
-    func transcribe(url: URL, mode: LanguageMode) async throws -> TranscriptSelection
+    /// Every locale Apple's on-device transcriber can run on this Mac, as BCP 47 identifiers.
+    func supportedLocaleIDs() async -> [String]
+    func statuses(localeIDs: [String]) async -> [String: ModelAvailability]
+    func install(localeIDs: [String]) async throws
+    /// Evaluates the recording in each locale, in order, and picks the best transcript.
+    func transcribe(url: URL, localeIDs: [String]) async throws -> TranscriptSelection
 }
 
 actor SpeechService: SpeechProcessing {
-    func statuses() async -> [String: ModelAvailability] {
+    func supportedLocaleIDs() async -> [String] {
+        guard SpeechTranscriber.isAvailable else { return [] }
+        return await SpeechTranscriber.supportedLocales.map { $0.identifier(.bcp47) }
+    }
+
+    func statuses(localeIDs: [String]) async -> [String: ModelAvailability] {
         guard SpeechTranscriber.isAvailable else { return [:] }
         var result: [String: ModelAvailability] = [:]
-        for id in LanguageMode.automatic.localeIDs {
+        for id in localeIDs {
             guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: id)) else {
                 result[id] = .unsupported
                 continue
@@ -38,8 +46,8 @@ actor SpeechService: SpeechProcessing {
         return result
     }
 
-    func install(mode: LanguageMode) async throws {
-        for id in mode.localeIDs {
+    func install(localeIDs: [String]) async throws {
+        for id in localeIDs {
             try Task.checkCancellation()
             let transcriber = try await makeTranscriber(id: id)
             if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
@@ -48,12 +56,12 @@ actor SpeechService: SpeechProcessing {
         }
     }
 
-    func transcribe(url: URL, mode: LanguageMode) async throws -> TranscriptSelection {
+    func transcribe(url: URL, localeIDs: [String]) async throws -> TranscriptSelection {
         guard try AudioClipValidator.containsAudio(at: url) else { throw SpeechFailure.noSpeech }
         var candidates: [TranscriptCandidate] = []
         // Sequential analysis avoids contention between Apple model instances.
-        // Auto mode evaluates the same recording in all supported languages locally.
-        for id in mode.localeIDs {
+        // Auto mode evaluates the same recording in every enabled language locally.
+        for id in localeIDs {
             try Task.checkCancellation()
             candidates.append(try await recognize(url: url, localeID: id))
         }

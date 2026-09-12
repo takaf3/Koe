@@ -40,7 +40,7 @@ final class RecoveryAndInsertionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = try makeAudio(in: directory, name: "silent", duration: 1, amplitude: 0)
         do {
-            _ = try await SpeechService().transcribe(url: url, mode: .automatic)
+            _ = try await SpeechService().transcribe(url: url, localeIDs: ["en-US", "ja-JP"])
             XCTFail("Silence should not produce a transcript")
         } catch { XCTAssertEqual(error as? SpeechFailure, .noSpeech) }
     }
@@ -110,7 +110,8 @@ final class RecoveryAndInsertionTests: XCTestCase {
 
     @MainActor private func makeModel(recorder: RecoveryRecorder, speech: SuspendedSpeech,
                                      timeout: Duration? = nil) -> AppModel {
-        let model = AppModel(startServices: false, recorder: recorder, speech: speech,
+        let model = AppModel(defaults: UserDefaults(suiteName: "KoeTests.recovery.\(UUID().uuidString)")!, startServices: false,
+                             preferredLanguages: ["ja-JP", "en-US"], recorder: recorder, speech: speech,
                              transcriptionTimeout: timeout, microphonePermission: { true })
         model.models = ["en-US": .installed, "ja-JP": .installed, "fr-FR": .installed]
         return model
@@ -141,9 +142,10 @@ private actor SuspendedSpeech: SpeechProcessing {
     var callCount = 0
     var returnedCount = 0
     private var continuations: [CheckedContinuation<TranscriptSelection, any Error>] = []
-    func statuses() -> [String: ModelAvailability] { ["en-US": .installed, "ja-JP": .installed, "fr-FR": .installed] }
-    func install(mode: LanguageMode) {}
-    func transcribe(url: URL, mode: LanguageMode) async throws -> TranscriptSelection {
+    func supportedLocaleIDs() -> [String] { ["en-US", "ja-JP", "fr-FR"] }
+    func statuses(localeIDs: [String]) -> [String: ModelAvailability] { ["en-US": .installed, "ja-JP": .installed, "fr-FR": .installed] }
+    func install(localeIDs: [String]) {}
+    func transcribe(url: URL, localeIDs: [String]) async throws -> TranscriptSelection {
         callCount += 1
         defer { returnedCount += 1 }
         return try await withCheckedThrowingContinuation { continuations.append($0) }

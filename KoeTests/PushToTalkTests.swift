@@ -160,7 +160,10 @@ final class PushToTalkTests: XCTestCase {
 
     @MainActor private func makeModel(recorder: TestRecorder,
                                      permission: @escaping @MainActor () async -> Bool = { true }) -> AppModel {
-        let model = AppModel(startServices: false, recorder: recorder, microphonePermission: permission)
+        // An isolated suite keeps the installed app's language choices out of the test.
+        let model = AppModel(defaults: UserDefaults(suiteName: "KoeTests.pushToTalk.\(UUID().uuidString)")!,
+                             startServices: false, preferredLanguages: ["ja-JP", "en-US"],
+                             recorder: recorder, microphonePermission: permission)
         model.models = ["en-US": .installed, "ja-JP": .installed, "fr-FR": .installed]
         return model
     }
